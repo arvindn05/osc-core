@@ -162,20 +162,26 @@ public final class KeyStoreProvider {
     }
 
     private String getKeyStorePassword() throws KeyStoreProviderException {
-        try(InputStream is = getClass().getResourceAsStream(SECURITY_PROPS_RESOURCE_PATH)) {
-            LOG.info("Obtaining keystore password ...");
-            Properties properties = new Properties();
-            properties.load(is);
-            String keystorePassword = properties.getProperty(KEYSTORE_PASSWORD_ALIAS);
+        String keystorePassword = System.getenv(KEYSTORE_PASSWORD_ALIAS);
 
-            if(StringUtils.isBlank(keystorePassword)) {
-                throw new KeyStoreProviderException("Keystore password not found in security properties file");
+        if (StringUtils.isBlank(keystorePassword)) {
+            try (InputStream is = getClass().getResourceAsStream(SECURITY_PROPS_RESOURCE_PATH)) {
+                LOG.info("Obtaining keystore password ...");
+                Properties properties = new Properties();
+                properties.load(is);
+                keystorePassword = properties.getProperty(KEYSTORE_PASSWORD_ALIAS);
+
+            } catch (IOException ioe) {
+                throw new KeyStoreProviderException(
+                        "Failed to open to the security properties file - properties file was not loaded", ioe);
             }
-
-            return keystorePassword;
-        } catch (IOException ioe) {
-            throw new KeyStoreProviderException("Failed to open to the security properties file - properties file was not loaded", ioe);
         }
+
+        if (StringUtils.isBlank(keystorePassword)) {
+            throw new KeyStoreProviderException("Keystore password not found in security properties file");
+        }
+        return keystorePassword;
+
     }
 
     private OutputStream getKeyStoreOutputStream() throws KeyStoreProviderException {

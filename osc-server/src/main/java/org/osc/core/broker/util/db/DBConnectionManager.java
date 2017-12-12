@@ -30,7 +30,6 @@ import javax.sql.DataSource;
 
 import org.apache.commons.lang.RandomStringUtils;
 import org.osc.core.broker.service.api.DBConnectionManagerApi;
-import org.slf4j.LoggerFactory;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
@@ -41,6 +40,7 @@ import org.osgi.service.jpa.EntityManagerFactoryBuilder;
 import org.osgi.service.transaction.control.TransactionControl;
 import org.osgi.service.transaction.control.jpa.JPAEntityManagerProviderFactory;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This component provides a single OSGi service which offers access to
@@ -80,6 +80,7 @@ public class DBConnectionManager implements DBConnectionManagerApi {
     @Activate
     void start(Map<String, Object> properties) throws Exception {
 
+        try {
         this.properties = properties;
         Properties jdbcProps = new Properties();
         jdbcProps.setProperty(DataSourceFactory.JDBC_URL, this.connectionParams.getConnectionURL());
@@ -97,6 +98,10 @@ public class DBConnectionManager implements DBConnectionManagerApi {
 
         this.transactionalEntityManager = this.jpaEntityManagerProviderFactory
                 .getProviderFor(this.emf, null).getResource(this.txControl);
+        } catch (Exception e) {
+            log.error("Unable to initialize Database Connection Manager", e);
+            throw e;
+        }
     }
 
     @Deactivate

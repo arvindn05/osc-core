@@ -57,6 +57,7 @@ import javax.xml.bind.DatatypeConverter;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang.StringUtils;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.openssl.PEMException;
@@ -469,27 +470,20 @@ public final class X509TrustManagerFactory implements X509TrustManager, X509Trus
     }
 
     private char[] getTruststorePassword() throws Exception {
-        // password to keystore to retrieve truststore manager password
-        return getSecurityProperty(TRUSTSTORE_PASSWORD_ENTRY_KEY).toCharArray();
-    }
-
-    private String getSecurityProperty(String entryKey) throws Exception {
-        // output property
-        String property;
-
-        Properties properties = new Properties();
-        try {
-            properties.load(getClass().getResourceAsStream(EncryptionUtil.SECURITY_PROPS_RESOURCE_PATH));
-        } catch (IOException e) {
-            throw new Exception("Failed to load entry from security properties.", e);
+        String password = System.getenv(TRUSTSTORE_PASSWORD_ENTRY_KEY);
+        if (StringUtils.isBlank(password)) {
+            Properties properties = new Properties();
+            try {
+                properties.load(getClass().getResourceAsStream(EncryptionUtil.SECURITY_PROPS_RESOURCE_PATH));
+            } catch (IOException e) {
+                throw new Exception("Failed to load entry from security properties.", e);
+            }
+            password = properties.getProperty(TRUSTSTORE_PASSWORD_ENTRY_KEY);
         }
-        property = properties.getProperty(entryKey);
-
-        if (property == null || property.isEmpty()) {
+        if (StringUtils.isBlank(password)) {
             throw new Exception("No entry defined in properties.");
         }
-
-        return property;
+        return password.toCharArray();
     }
 
     private void notifyTruststoreChanged() {

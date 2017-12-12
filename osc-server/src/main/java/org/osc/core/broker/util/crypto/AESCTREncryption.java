@@ -181,14 +181,20 @@ public class AESCTREncryption {
         }
 
         private String loadKeystorePasswordForAESCTRKey() throws EncryptionException {
-            Properties properties = new Properties();
-            try(InputStream is =getClass().getResourceAsStream(EncryptionUtil.SECURITY_PROPS_RESOURCE_PATH)) {
-                properties.load(is);
-            } catch (IOException e) {
-                LOG.error("Error loading key from properties", e);
-                throw new EncryptionException("Failed to load keystore password.", e);
+            String aesctrPassword = System.getenv(PROPS_AESCTR_PASSWORD);
+
+            if (StringUtils.isEmpty(aesctrPassword)) {
+                Properties properties = new Properties();
+                try (InputStream is = getClass().getResourceAsStream(EncryptionUtil.SECURITY_PROPS_RESOURCE_PATH)) {
+                    properties.load(is);
+                } catch (IOException e) {
+                    LOG.error("Error loading key from properties", e);
+                    throw new EncryptionException("Failed to load keystore password.", e);
+                }
+                aesctrPassword = properties.getProperty(PROPS_AESCTR_PASSWORD);
+
             }
-            return properties.getProperty(PROPS_AESCTR_PASSWORD);
+            return aesctrPassword;
         }
     }
 
