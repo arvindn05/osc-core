@@ -16,9 +16,10 @@
  *******************************************************************************/
 package org.osc.core.broker.service.api;
 
-import org.osc.core.broker.service.request.BaseJobRequest;
-import org.osc.core.broker.service.response.BaseJobResponse;
+import org.osc.core.broker.service.request.UploadRequest;
+import org.osc.core.broker.service.response.EmptySuccessResponse;
 
-public interface SyncVirtualizationConnectorServiceApi
-        extends ServiceDispatcherApi<BaseJobRequest, BaseJobResponse> {
+public interface ReplaceInternalKeypairServiceApi
+    extends ServiceDispatcherApi<UploadRequest, EmptySuccessResponse> {
+
 }

@@ -110,6 +110,10 @@ public class ReleaseUpgradeMgr {
         deleteUpgradeMarkerFile();
     }
 
+    public static boolean isLastUpgradeSucceeded() {
+        return !new File(DB_UPGRADE_IN_PROGRESS_MARKER_FILE).exists();
+    }
+
     private static void replaceDefaultDBPassword(DBConnectionParameters params,
             DBConnectionManager dbMgr) throws Exception {
         if (params.isDefaultPasswordSet()) {
@@ -256,6 +260,8 @@ public class ReleaseUpgradeMgr {
             	upgrade92to93(stmt);
             case 93:
             	upgrade93to94(stmt);
+            case 94:
+            	upgrade94to95(stmt);
             case TARGET_DB_VERSION:
                 if (curDbVer < TARGET_DB_VERSION) {
                     execSql(stmt, "UPDATE RELEASE_INFO SET db_version = " + TARGET_DB_VERSION + " WHERE id = 1;");
@@ -267,7 +273,13 @@ public class ReleaseUpgradeMgr {
         }
     }
 
-    private static void upgrade93to94(Statement stmt) throws SQLException {
+    private static void upgrade94to95(Statement stmt) throws SQLException {
+		execSql(stmt, "alter table VIRTUALIZATION_CONNECTOR drop constraint FK_VC_LAST_JOB;");
+		execSql(stmt, "alter table VIRTUALIZATION_CONNECTOR drop constraint FK_VC_LAST_JOB_UNIQUE;");
+		execSql(stmt, "alter table VIRTUALIZATION_CONNECTOR drop column if exists last_job_id_fk;");
+	}
+
+	private static void upgrade93to94(Statement stmt) throws SQLException {
         execSql(stmt, "create table DISTRIBUTED_APPLIANCE_INSTANCE_POD_PORT (" +
                     "dai_fk bigint not null, " +
                     "pod_port_fk bigint not null," +
@@ -2077,10 +2089,6 @@ public class ReleaseUpgradeMgr {
             }
         }
         return releaseInfo;
-    }
-
-    private static boolean isLastUpgradeSucceeded() {
-        return !new File(DB_UPGRADE_IN_PROGRESS_MARKER_FILE).exists();
     }
 
     private static void createUpgradeMarkerFile() {

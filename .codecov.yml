@@ -21,3 +21,4 @@ coverage:
         target: 25%
         threshold: 1%
         base: parent
+    patch: false

@@ -56,6 +56,22 @@
 			<url>http://ci.opensecuritycontroller.org:8082/nexus/content/repositories/releases/</url>
 		</repository>
 	</repositories>
+=======
+        <repository>
+            <id>vaadin-addons</id>
+            <url>http://maven.vaadin.com/vaadin-addons</url>
+        </repository>
+        <repository>
+            <id>vaadin-snapshots</id>
+            <url>http://oss.sonatype.org/content/repositories/vaadin-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 	<pluginRepositories>
 		<pluginRepository>
 			<id>vaadin-snapshots</id>
@@ -228,6 +244,13 @@
 			<scope>runtime</scope>
 		</dependency>
 
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk15on</artifactId>
+            <version>1.58</version>
+            <scope>runtime</scope>
+        </dependency>
+
 		<!-- OSGi runtime for JPA -->
 		<dependency>
 			<groupId>org.apache.aries.jpa</groupId>
@@ -310,25 +333,24 @@
 								<configuration>
 									<tasks>
 										<!-- copy bundled plugins for bundled profile "all". -->										
-										<copy tofile="${basedir}/plugins/SampleMgrPlugin.bar">
+										<copy tofile="${basedir}/data/plugins/SampleMgrPlugin.bar">
 											<fileset
 												dir="${basedir}/../../security-mgr-sample-plugin/target/"
 												includes="SampleMgrPlugin*.bar" />
 										</copy>
-										<copy tofile="${basedir}/plugins/Panorama.bar">
 											<fileset
 												dir="${basedir}/../../osc-pan-plugin/target/"
 												includes="Panorama*.bar" />
 										</copy>
-										<copy tofile="${basedir}/plugins/NscSdnControllerPlugin.bar">
+										<copy tofile="${basedir}/data/plugins/NscSdnControllerPlugin.bar">
 											<fileset dir="${basedir}/../../sdn-controller-nsc-plugin/target/"
 												includes="NscSdnControllerPlugin*.bar" />
 										</copy>
-                                        <copy tofile="${basedir}/plugins/NuageSdnControllerPlugin.bar">
+                                        <copy tofile="${basedir}/data/plugins/NuageSdnControllerPlugin.bar">
                                             <fileset dir="${basedir}/../../osc-nuage-plugin/target/"
                                                 includes="NuageSdnControllerPlugin*.bar" />
                                         </copy>
-                                        <copy tofile="${basedir}/plugins/NeutronSfcSdnControllerPlugin.bar">
+                                        <copy tofile="${basedir}/data/plugins/NeutronSfcSdnControllerPlugin.bar">
                                             <fileset dir="${basedir}/../../sdn-controller-nsfc-plugin/target/"
                                                 includes="NeutronSfcSdnControllerPlugin*.bar" /> 
                                         </copy>										
@@ -419,7 +441,7 @@
 						<fileset>
 							<directory>${basedir}</directory>
 							<includes>
-								<include>plugins/**</include>
+								<include>data/plugins/**</include>
 								<include>generated/**</include>
 								<include>webapp/**</include>
 							</includes>
@@ -428,18 +450,24 @@
 						<fileset>
 							<directory>${basedir}/../osc-server-bom/root/opt/vmidc/bin</directory>
 							<excludes>
-								<exclude>plugins</exclude>
+                                <exclude>default-data/plugins/.keep</exclude>                            
+                                <exclude>default-data/mainKeyStore.p12</exclude>
+                                <exclude>default-data/osctrustore.jks</exclude>                            
+                                <exclude>default-data/vmidcServer.conf</exclude>                              
+                                <exclude>scripts/**</exclude>
 								<exclude>logback.xml</exclude>
+								<exclude>mainKeyStore.p12</exclude>
+								<exclude>osc_pbkdf2_key.py</exclude>
+								<exclude>pbkdf2.py</exclude>
 								<exclude>quartz.properties</exclude>
-								<exclude>vmidcServer.conf</exclude>
 								<exclude>vmidc.sh</exclude>
+                                <exclude>osctrustore.jks</exclude>
+                                <exclude>vmidcServer.conf</exclude>
 								<exclude>vmidcShell.py</exclude>
-								<exclude>scripts/**</exclude>
 							</excludes>
 							<includes>
-								<include>plugins/**</include>
-								<include>jar/**</include>
-								<include>osc-server.jar</include>
+                                <include>default-data/**/**</include>
+								<include>**</include>
 							</includes>
 						</fileset>
 					</filesets>
@@ -488,33 +516,31 @@
 								</unjar>
 								<copy todir="${basedir}/../osc-server-bom/root/opt/vmidc/bin">
 									<fileset dir="${basedir}">
-										<include name="vmidcKeyStore.jks" />
 										<include name="config/**" />
-										<include name="plugins/**" />
 										<include name="webapp/**" />
 									</fileset>
 									<fileset dir="${basedir}/../osc-control/target"
 										includes="osc-control.jar" />
 								</copy>
+                                <!-- Copy plugins to plugins folder in server-bom, not data/plugins folder --> 
+                                <copy todir="${basedir}/../osc-server-bom/root/opt/vmidc/bin/default-data/">
+                                    <fileset dir="${basedir}/data/">
+                                        <include name="plugins/**" />
+                                    </fileset>
+                                </copy>                                
 
 								<!-- create serverUpgradeBundle.zip -->
 								<zip destfile="${basedir}/../target/serverUpgradeBundle.zip">
 									<fileset dir="${basedir}/../osc-server-bom/root">
 										<include name="opt/vmidc/bin/**" />
-										<exclude name="opt/vmidc/bin/libts-jni.so" />
-										<exclude name="opt/vmidc/bin/quartz.properties" />
-										<exclude name="opt/vmidc/bin/vmidcServer.conf" />
-										<exclude name="opt/vmidc/bin/vmidcKeyStore.jks" />
 										<exclude name="opt/vmidc/bin/*.iml" />
 										<exclude name="opt/vmidc/bin/*.bnd" />
 										<exclude name="opt/vmidc/bin/*.backup" />
-										<exclude name="opt/vmidc/bin/mainKeyStore.p12" />
-										<exclude name="opt/vmidc/bin/vmidctruststore.jks" />
 										<exclude name="opt/vmidc/bin/server.pid" />
-										<exclude name="opt/vmidc/bin/vmiDCDB.*" />
+										<exclude name="opt/vmidc/bin/data/vmiDCDB.*" />
 									</fileset>
 									<zipfileset dir="${basedir}/../osc-control/target"
-										includes="osc-control-upgrade.jar" fullpath="opt/vmidc/bin/osc-server.jar" />
+																		includes="osc-control-upgrade.jar" fullpath="opt/vmidc/bin/osc-server.jar" />
 									<fileset dir="${basedir}/../osc-server-bom/Sources">
 										<include name="jre-8u131-linux-x64.tar.gz" />
 									</fileset>

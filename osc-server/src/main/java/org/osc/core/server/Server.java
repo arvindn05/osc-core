@@ -28,11 +28,6 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-
 import org.apache.commons.lang.time.DurationFormatUtils;
 import org.osc.core.broker.job.JobEngine;
 import org.osc.core.broker.model.entities.events.SystemFailureType;
@@ -41,7 +36,10 @@ import org.osc.core.broker.rest.client.RestBaseClient;
 import org.osc.core.broker.rest.client.openstack.vmidc.notification.runner.OsDeploymentSpecNotificationRunner;
 import org.osc.core.broker.rest.client.openstack.vmidc.notification.runner.OsSecurityGroupNotificationRunner;
 import org.osc.core.broker.rest.client.openstack.vmidc.notification.runner.RabbitMQRunner;
-import org.osc.core.broker.service.ConformService;
+import org.osc.core.broker.service.DeploymentSpecConformJobFactory;
+import org.osc.core.broker.service.DistributedApplianceConformJobFactory;
+import org.osc.core.broker.service.ManagerConnectorConformJobFactory;
+import org.osc.core.broker.service.SecurityGroupConformJobFactory;
 import org.osc.core.broker.service.alert.AlertGenerator;
 import org.osc.core.broker.service.api.ArchiveServiceApi;
 import org.osc.core.broker.service.api.GetJobsArchiveServiceApi;
@@ -49,8 +47,8 @@ import org.osc.core.broker.service.api.RestConstants;
 import org.osc.core.broker.service.api.server.EncryptionApi;
 import org.osc.core.broker.service.api.server.ServerApi;
 import org.osc.core.broker.service.api.server.ServerTerminationListener;
-import org.osc.core.broker.service.dto.NetworkSettingsDto;
 import org.osc.core.broker.service.persistence.DatabaseUtils;
+import org.osc.core.broker.service.ssl.X509TrustManagerApi;
 import org.osc.core.broker.util.FileUtil;
 import org.osc.core.broker.util.NetworkUtil;
 import org.osc.core.broker.util.PasswordUtil;
@@ -61,7 +59,6 @@ import org.osc.core.broker.util.db.DBConnectionManager;
 import org.osc.core.broker.util.db.DBConnectionParameters;
 import org.osc.core.broker.util.db.upgrade.ReleaseUpgradeMgr;
 import org.osc.core.broker.util.log.LogUtil;
-import org.osc.core.broker.util.network.NetworkSettingsApi;
 import org.osc.core.server.scheduler.SyncDistributedApplianceJob;
 import org.osc.core.server.scheduler.SyncSecurityGroupJob;
 import org.osc.core.server.websocket.WebSocketRunner;
@@ -88,9 +85,6 @@ import org.quartz.TriggerBuilder;
 import org.quartz.impl.StdSchedulerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.w3c.dom.Document;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
 
 /**
  * This component exposes both the API and the implementation so that
@@ -106,11 +100,12 @@ public class Server implements ServerApi {
     private static final int SERVER_TIME_CHANGE_THRESHOLD = 1000 * 60 * 10; // 10 mins
     private static final int TIME_CHANGE_THREAD_SLEEP_INTERVAL = 1000 * 10; // 10 secs
     private static final int SERVER_SYNC_DELAY = 60 * 3; // 3 mins
+    private static final String REPLACEMENT_SSL_KEYPAIR_ZIP = "internal.keypair.startup.location";
 
     private static final Logger log = LoggerFactory.getLogger(Server.class);
 
     private static final Integer DEFAULT_API_PORT = 8090;
-    public static final String CONFIG_PROPERTIES_FILE = "vmidcServer.conf";
+    public static final String CONFIG_PROPERTIES_FILE = "data/vmidcServer.conf";
     private static final String SERVER_PID_FILE = "server.pid";
 
     public static final String PRODUCT_NAME = "Open Security Controller";
@@ -128,7 +123,16 @@ public class Server implements ServerApi {
     private boolean devMode = false;
 
     @Reference
-    private ConformService conformService;
+    private DistributedApplianceConformJobFactory daConformJobFactory;
+
+    @Reference
+    private DeploymentSpecConformJobFactory dsConformJobFactory;
+
+    @Reference
+    private SecurityGroupConformJobFactory sgConformJobFactory;
+
+    @Reference
+    private ManagerConnectorConformJobFactory mcConformJobFactory;
 
     @Reference
     private ApiFactoryService apiFactoryService;
@@ -158,6 +162,7 @@ public class Server implements ServerApi {
     @Reference(cardinality=ReferenceCardinality.MULTIPLE, policy=ReferencePolicy.DYNAMIC)
     private volatile List<ServerTerminationListener> terminationListeners = new CopyOnWriteArrayList<>();
 
+
     @Reference
     private EncryptionApi encryption;
 
@@ -173,6 +178,9 @@ public class Server implements ServerApi {
     @Reference
     private AlertGenerator alertGenerator;
 
+    @Reference
+    private X509TrustManagerApi x509TrustManager;
+
     private Thread thread;
     private BundleContext context;
     private ServiceRegistration<RabbitMQRunner> rabbitMQRegistration;
@@ -180,6 +188,11 @@ public class Server implements ServerApi {
     @Activate
     void activate(BundleContext context) {
         this.context = context;
+
+        if (doReplaceSslKeysAndReboot()) {
+            return;
+        }
+
         Runnable server = () -> {
             try {
                 startServer();
@@ -203,29 +216,6 @@ public class Server implements ServerApi {
             log.warn("############ Version: " + VersionUtil.getVersion().getVersionStr() + ". ############");
             log.warn("\n");
             ServerUtil.writePIDToFile(SERVER_PID_FILE);
-
-            NetworkSettingsApi api = new NetworkSettingsApi();
-            if (api.getNetworkSettings().isDhcp()) {
-                EnvironmentProperties envProp = parseEnvironmentPropertiesXml();
-                if (envProp != null) {
-                    try {
-                        log.info("Setting network info: " + envProp.toString());
-                        if (envProp.hostIpAddress != null && !envProp.hostIpAddress.isEmpty()) {
-                            NetworkSettingsDto networkSettingsDto = new NetworkSettingsDto();
-                            networkSettingsDto.setDhcp(false);
-                            networkSettingsDto.setHostIpAddress(envProp.hostIpAddress);
-                            networkSettingsDto.setHostSubnetMask(envProp.hostSubnetMask);
-                            networkSettingsDto.setHostDefaultGateway(envProp.hostDefaultGateway);
-                            networkSettingsDto.setHostDnsServer1(envProp.hostDnsServer1);
-                            networkSettingsDto.setHostDnsServer2(envProp.hostDnsServer2);
-                            api.setNetworkSettings(networkSettingsDto);
-                        }
-                    } catch (Exception ex) {
-                        log.error("Failed to read OVF attributes.", ex);
-                    }
-                }
-            }
-
             ReleaseUpgradeMgr.initDb(this.encryption, this.dbParams, this.dbMgr);
             DatabaseUtils.createDefaultDB(this.dbMgr, this.txBroadcastUtil);
             DatabaseUtils.markRunningJobAborted(this.dbMgr, this.txBroadcastUtil);
@@ -272,8 +262,6 @@ public class Server implements ServerApi {
     }
 
     public static class EnvironmentProperties {
-        private static final String OVF_ENV_XML_DIR = "/mnt/media";
-        private static final String OVF_ENV_XML_FILE = "ovf-env.xml";
 
         private boolean dhcp;
         private String hostIpAddress;
@@ -296,51 +284,6 @@ public class Server implements ServerApi {
 
     }
 
-    public static EnvironmentProperties parseEnvironmentPropertiesXml() throws ParserConfigurationException, SAXException, IOException {
-        File vmwareConf = new File(EnvironmentProperties.OVF_ENV_XML_DIR + File.separator + EnvironmentProperties.OVF_ENV_XML_FILE);
-        if (!vmwareConf.exists()) {
-            log.info("VMware Virtual Appliance Configuration file missing.");
-            return null;
-        }
-
-        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-        DocumentBuilder db = dbf.newDocumentBuilder();
-        Document document = db.parse(vmwareConf);
-
-        EnvironmentProperties env = new EnvironmentProperties();
-        NodeList nodeList = document.getElementsByTagName("Property");
-        for (int i = 0, size = nodeList.getLength(); i < size; i++) {
-            String key = nodeList.item(i).getAttributes().getNamedItem("oe:key").getTextContent();
-            String value = nodeList.item(i).getAttributes().getNamedItem("oe:value").getTextContent();
-
-            if (value == null || value.isEmpty()) {
-                continue;
-            }
-
-            if (key.equalsIgnoreCase("sbm_gui_passwd_0")) {
-                env.defaultGuiPassword = value;
-            } else if (key.equalsIgnoreCase("sbm_cli_en_passwd_0")) {
-                env.defaultCliPassword = value;
-            } else if (key.equalsIgnoreCase("sbm_hostname")) {
-                env.hostname = value;
-            } else if (key.equalsIgnoreCase("sbm_ip_0")) {
-                env.hostIpAddress = value;
-            } else if (key.equalsIgnoreCase("sbm_netmask_0")) {
-                env.hostSubnetMask = value;
-            } else if (key.equalsIgnoreCase("sbm_gateway_0")) {
-                env.hostDefaultGateway = value;
-            } else if (key.equalsIgnoreCase("sbm_dns1_0")) {
-                env.hostDnsServer1 = value;
-            } else if (key.equalsIgnoreCase("sbm_dns2_0")) {
-                env.hostDnsServer2 = value;
-            }
-        }
-
-        log.warn("Appliance Env Info= " + env.toString());
-
-        return env;
-    }
-
     private void startScheduler() throws SchedulerException {
         log.warn("Starting scheduler (pid:" + ServerUtil.getCurrentPid() + ")");
         Scheduler scheduler = StdSchedulerFactory.getDefaultScheduler();
@@ -348,7 +291,11 @@ public class Server implements ServerApi {
 
         JobDataMap jobDataMap = new JobDataMap();
         jobDataMap.put(ApiFactoryService.class.getName(), this.apiFactoryService);
-        jobDataMap.put(ConformService.class.getName(), this.conformService);
+        jobDataMap.put(DistributedApplianceConformJobFactory.class.getName(), this.daConformJobFactory);
+        jobDataMap.put(DeploymentSpecConformJobFactory.class.getName(), this.dsConformJobFactory);
+        jobDataMap.put(SecurityGroupConformJobFactory.class.getName(), this.sgConformJobFactory);
+        jobDataMap.put(ManagerConnectorConformJobFactory.class.getName(), this.mcConformJobFactory);
+
 
         JobDetail syncDaJob = JobBuilder.newJob(SyncDistributedApplianceJob.class).usingJobData(jobDataMap).build();
         JobDetail syncSgJob = JobBuilder.newJob(SyncSecurityGroupJob.class).usingJobData(jobDataMap).build();
@@ -436,6 +383,31 @@ public class Server implements ServerApi {
         } catch (Exception e) {
             log.error("Failed to write to the properties file", e);
         }
+    }
+
+    private boolean doReplaceSslKeysAndReboot() {
+        if (!ReleaseUpgradeMgr.isLastUpgradeSucceeded()) {
+            return false;
+        }
+
+        // This method is just before the startup. It cannot be allowed to throw.
+        try {
+            Properties prop = FileUtil.loadProperties(Server.CONFIG_PROPERTIES_FILE);
+            String replacementKeypairLocation = prop.getProperty(REPLACEMENT_SSL_KEYPAIR_ZIP);
+            if (replacementKeypairLocation != null) {
+                File zipFile = new File(replacementKeypairLocation);
+                if (zipFile.exists()) {
+                    log.info("New ssl key pair file located at " + replacementKeypairLocation
+                            + ". Replacing and rebooting !!");
+                    this.x509TrustManager.replaceInternalCertificate(zipFile, true);
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            log.error("Exception replacing internal ssl key pair: ", e);
+        }
+
+        return false;
     }
 
     private void addShutdownHook() {

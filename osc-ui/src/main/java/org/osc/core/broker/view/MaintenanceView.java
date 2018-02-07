@@ -33,7 +33,6 @@ import org.osc.core.broker.service.api.SetEmailSettingsServiceApi;
 import org.osc.core.broker.service.api.SetNATSettingsServiceApi;
 import org.osc.core.broker.service.api.SetNetworkSettingsServiceApi;
 import org.osc.core.broker.service.api.UpdateJobsArchiveServiceApi;
-import org.osc.core.broker.service.api.UpgradeServiceApi;
 import org.osc.core.broker.service.api.server.ArchiveApi;
 import org.osc.core.broker.service.api.server.ServerApi;
 import org.osc.core.broker.service.api.server.ValidationApi;
@@ -49,13 +48,13 @@ import org.osc.core.broker.view.maintenance.SslConfigurationLayout;
 import org.osc.core.broker.view.maintenance.SummaryLayout;
 import org.osc.core.broker.view.maintenance.SupportLayout;
 import org.osc.core.broker.view.util.ViewUtil;
-import org.slf4j.LoggerFactory;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ServiceScope;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.vaadin.navigator.View;
 import com.vaadin.navigator.ViewChangeListener.ViewChangeEvent;
@@ -90,9 +89,6 @@ public class MaintenanceView extends VerticalLayout implements View {
 
     @Reference
     BackupServiceApi backupService;
-
-    @Reference
-    UpgradeServiceApi upgradeService;
 
     @Reference
     RestoreServiceApi restoreService;
@@ -216,7 +212,7 @@ public class MaintenanceView extends VerticalLayout implements View {
     }
 
     private FormLayout buildUpgradeForm() {
-        return new ManageLayout(this.backupService, this.upgradeService, this.restoreService, this.server, this.validator);
+        return new ManageLayout(this.backupService, this.restoreService, this.server, this.validator);
     }
 
     private FormLayout buildSummary() {

@@ -5,8 +5,12 @@
 osc-server-bom/root/opt/vmidc/bin/webapp/**
 osc-export/generated/**
 osc-export/webapp/**
-osc-export/log/**
-osc-export/plugins/**
+osc-export/data/*.db*
+osc-export/data/log/**
+osc-export/data/plugins/**
+osc-export/data/ovf/**
+osc-export/data/mainKeyStore.p12
+osc-export/data/osctrustore.jks
 osc-export/*.db*
 osc-export/server.pid
 osc-server-bom/root/opt/vmidc/bin/META-INF/
@@ -14,7 +18,7 @@ osc-server-bom/root/opt/vmidc/bin/aQute/
 osc-server-bom/root/opt/vmidc/bin/config/
 osc-server-bom/root/opt/vmidc/bin/jar/
 osc-server-bom/root/opt/vmidc/bin/launcher.properties
-osc-server-bom/root/opt/vmidc/bin/plugins/
+osc-server-bom/root/opt/vmidc/bin/default-data/**
 osc-server-bom/root/opt/vmidc/bin/osc-control.jar
 osc-server-bom/root/opt/vmidc/bin/vmidcKeyStore.jks
 osc-server-bom/Sources/jre*.tar.*
